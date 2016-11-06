@@ -53,7 +53,7 @@ pacf(diff(rice))
 ## or let R suggest the appropriate ARIMA model
 auto.arima(log(rice))
 
-## Estimate the ARIMA Model and make predictions for the next 10 years based on it
+## Estimate the ARIMA Model and make predictions for the next 20 years based on it
 fit <- Arima(log(rice),order=c(0,1,1),seasonal = list(order = c(0,1,1), period = 1))
 pred <- predict(fit, n.ahead = 20)
 ts.plot(rice,2.718^pred$pred, log = "y", lty = c(1:3))
