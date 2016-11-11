@@ -104,6 +104,7 @@ fit41 <- arima(residuals, order = c(2,1,0), method = "CSS-ML")
 fit42 <- arima(residuals, order = c(2,1,0), method = "CSS")
 fit43 <- arima(residuals, order = c(2,1,0), method = "ML")
 
+# check significance of the coefficients of the models
 print(fit41)
 print(fit42)
 print(fit43)
