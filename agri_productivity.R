@@ -1,4 +1,6 @@
 setwd("F:/M.Sc. Semester III/Time Series/R")
+# download the data file from
+# https://github.com/anirudhjayaraman/Time-Series-Analysis/blob/master/productivity.xls
 
 ## load the required libraries
 library(xlsx)
@@ -24,6 +26,9 @@ abline(reg = lm(growth ~ time(growth)))
 
 ## KPSS test checks the null hypothesis of trend stationarity
 kpss.test(rice)
+# KPSS Level = 3.2953, Truncation lag parameter = 1, p-value < 0.01
+# the rice series is therefore trend stationary
+
 ## De-trending
 trend <- lm(rice ~ time(rice))
 # trend$fitted.values
@@ -33,7 +38,7 @@ plot(residuals)
 ## Stationarity of residuals is checked by applying the ADF Test
 # ADF test on the original series
 adf.test(residuals) # Dickey-Fuller = -1.5469, Lag order = 4, p-value = 0.7589
-ndiffs(residuals)
+ndiffs(residuals) # the number of differences to make the series stationary = 1
 diff_res <- diff(residuals)
 plot(diff(residuals))
 adf.test(diff_res) # Dickey-Fuller = -6.4471, Lag order = 3, p-value < 0.01
@@ -57,6 +62,7 @@ fit11 <- arima(residuals, order = c(2,1,1), method = "CSS-ML")
 fit12 <- arima(residuals, order = c(2,1,1), method = "CSS")
 fit13 <- arima(residuals, order = c(2,1,1), method = "ML")
 
+# check significance of the coefficients of the models
 print(fit11)
 print(fit12)
 print(fit13)
@@ -70,6 +76,7 @@ fit21 <- arima(residuals, order = c(1,1,1), method = "CSS-ML")
 fit22 <- arima(residuals, order = c(1,1,1), method = "CSS")
 fit23 <- arima(residuals, order = c(1,1,1), method = "ML")
 
+# check significance of the coefficients of the models
 print(fit21)
 print(fit22)
 print(fit23)
@@ -83,6 +90,7 @@ fit31 <- arima(residuals, order = c(0,1,1), method = "CSS-ML")
 fit32 <- arima(residuals, order = c(0,1,1), method = "CSS")
 fit33 <- arima(residuals, order = c(0,1,1), method = "ML")
 
+# check significance of the coefficients of the models
 print(fit31)
 print(fit32)
 print(fit33)
@@ -104,6 +112,11 @@ AIC(fit41) # 783.7276
 AIC(fit42)
 AIC(fit43) # 783.7276
 
+# From the above it's clear that ARIMA(0,1,1) is the best fit for this model
 fit <- auto.arima(residuals, allowdrift = FALSE)
 print(fit)
 AIC(fit) # 780.1837
+
+# Plot original series vs fitted series
+plot(residuals, col = 'red')
+lines(fitted(fit), col = 'blue')
