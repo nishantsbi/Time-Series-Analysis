@@ -6,88 +6,104 @@ library(forecast)
 library(tseries)
 
 ## load the data from a CSV or Excel file. This example is done with an Excel sheet.
-prod_df <- read.xlsx(file = 'agricultural_productivity.xls', sheetIndex = 'Sheet1', rowIndex = 8:65, colIndex = 2, header = FALSE)
-colnames(prod_df) <- c('Rice')
+prod_df <- read.xlsx(file = 'productivity.xls',sheetIndex = 'Sheet1',rowIndex = 2:67, colIndex = 2:3, header = FALSE)
+colnames(prod_df) <- c('Rice','Growth')
 View(prod_df)
 ## write this dataframe to a CSV file
 write.csv(prod_df, file="rice.csv")
 
 ## store rice data as time series objects
-rice <- ts(prod_df$Rice, start=c(1951, 1), end=c(2008, 1), frequency=1) 
-
-## Ljung-Box Test tests the null that The data are independently distributed
-Box.test(rice, type="Ljung-Box")
-Box.test(rice, type="Box-Pierce")
-
-## Physically check for transformations for which the data 'looks' stationary
+rice <- ts(prod_df$Rice, start=c(1950, 1), end=c(2015, 1), frequency=1) 
+growth <- ts(prod_df$Growth[2:66], start = c(1951,1), end = c(2015,1), frequency = 1)
 plot(rice)
 abline(reg=lm(rice~time(rice)))
+plot(growth)
+abline(reg = lm(growth ~ time(growth)))
 
-plot(diff(rice))
-abline(reg=lm(diff(rice)~time(diff(rice))))
+## Arriving at a Stationary Series
 
-plot(log(rice))
-abline(reg=lm(log(rice)~time(log(rice))))
+## KPSS test checks the null hypothesis of trend stationarity
+kpss.test(rice)
+## De-trending
+trend <- lm(rice ~ time(rice))
+# trend$fitted.values
+# trend$residuals
+residuals <- rice - trend$fitted.values
+plot(residuals)
+## Stationarity of residuals is checked by applying the ADF Test
+# ADF test on the original series
+adf.test(residuals) # Dickey-Fuller = -1.5469, Lag order = 4, p-value = 0.7589
+ndiffs(residuals)
+diff_res <- diff(residuals)
+plot(diff(residuals))
+adf.test(diff_res) # Dickey-Fuller = -6.4471, Lag order = 3, p-value < 0.01
 
-plot(diff(log(rice)))
-abline(reg = lm(diff(log(rice))~time(diff(log(rice)))))
+ 
+## Identifying the appropriate ARIMA Model
+acf(diff_res, lag.max = 70) # p = 2
+pacf(diff_res, lag.max = 70) # q = 1
+tsdisplay(diff_res, lag.max = 30)
 
-## or alternatively, use command ndiffs() to calculate number of differences
-## to achieve stationarity
-ndiffs(rice) # prints out 1 in this case
+## testing the significance of the coefficients
+Box.test(diff_res, type = 'Ljung-Box') 
+# X-squared = 19.3729, df = 1, p-value = 1.075e-05
+Box.test(diff_res, type = 'Box-Pierce')
+# X-squared = 18.5055, df = 1, p-value = 1.694e-05
 
-## Augmented Dickey-Fuller Test
-## tests the null hypothesis of the presence of a unit root
-adf.test(rice) # indicates presence of a unit root
-adf.test(diff(rice)) # indicates stationarity upon first differencing
-adf.test(diff(log(rice))) # indicates stationarity
+## Estimating Various Models
 
-## Plot the ACF and PACF to determine 'q' and 'p' respectively
-## d = 1 since we take first differences of the series
-acf(diff(log(rice)), lag.max = 50)
-pacf(diff(log(rice)))
+# ARIMA(2,1,1)
+fit11 <- arima(residuals, order = c(2,1,1), method = "CSS-ML")
+fit12 <- arima(residuals, order = c(2,1,1), method = "CSS")
+fit13 <- arima(residuals, order = c(2,1,1), method = "ML")
 
-acf(diff(rice))
-pacf(diff(rice))
+print(fit11)
+print(fit12)
+print(fit13)
 
-## or let R suggest the appropriate ARIMA model
-auto.arima(log(rice))
+AIC(fit11) # 782.9799
+AIC(fit12)
+AIC(fit13) # 782.9799
 
-## Estimate the ARIMA Model and make predictions for the next 20 years based on it
-fit <- Arima(log(rice),order=c(0,1,1),seasonal = list(order = c(0,1,1), period = 1))
-pred <- predict(fit, n.ahead = 20)
-ts.plot(rice,2.718^pred$pred, log = "y", lty = c(1:3))
-AIC(fit)
+# ARIMA(1,1,1)
+fit21 <- arima(residuals, order = c(1,1,1), method = "CSS-ML")
+fit22 <- arima(residuals, order = c(1,1,1), method = "CSS")
+fit23 <- arima(residuals, order = c(1,1,1), method = "ML")
 
-# riceDiffforecasts <- HoltWinters(log(rice), beta = TRUE, gamma = TRUE)
-# forecasts <- forecast.HoltWinters(riceDiffforecasts, h = 10)
-# plot.forecast(forecasts)
-# acf(forecasts$residuals)
-# Box.test(forecasts$residuals, lag=20, type="Ljung-Box")
-# plot.ts(forecasts$residuals)
-# 
-# 
-# plotForecastErrors <- function(forecasterrors)
-# {
-#   # make a histogram of the forecast errors:
-#   mybinsize <- IQR(forecasterrors)/4
-#   mysd   <- sd(forecasterrors)
-#   mymin  <- min(forecasterrors) - mysd*5
-#   mymax  <- max(forecasterrors) + mysd*3
-#   # generate normally distributed data with mean 0 and standard deviation mysd
-#   mynorm <- rnorm(10000, mean=0, sd=mysd)
-#   mymin2 <- min(mynorm)
-#   mymax2 <- max(mynorm)
-#   if (mymin2 < mymin) { mymin <- mymin2 }
-#   if (mymax2 > mymax) { mymax <- mymax2 }
-#   # make a red histogram of the forecast errors, with the normally distributed data overlaid:
-#   mybins <- seq(mymin, mymax, mybinsize)
-#   hist(forecasterrors, col="red", freq=FALSE, breaks=mybins)
-#   # freq=FALSE ensures the area under the histogram = 1
-#   # generate normally distributed data with mean 0 and standard deviation mysd
-#   myhist <- hist(mynorm, plot=FALSE, breaks=mybins)
-#   # plot the normal curve as a blue line on top of the histogram of forecast errors:
-#   points(myhist$mids, myhist$density, type="l", col="blue", lwd=2)
-# }
-# 
-# plotForecastErrors(forecasts$residuals)
+print(fit21)
+print(fit22)
+print(fit23)
+
+AIC(fit21) # 781.0581
+AIC(fit22)
+AIC(fit23) # 781.0581
+
+# ARIMA(0,1,1)
+fit31 <- arima(residuals, order = c(0,1,1), method = "CSS-ML")
+fit32 <- arima(residuals, order = c(0,1,1), method = "CSS")
+fit33 <- arima(residuals, order = c(0,1,1), method = "ML")
+
+print(fit31)
+print(fit32)
+print(fit33)
+
+AIC(fit31) # 780.1837
+AIC(fit32)
+AIC(fit33) # 780.1837
+
+# ARIMA(2,1,0)
+fit41 <- arima(residuals, order = c(2,1,0), method = "CSS-ML")
+fit42 <- arima(residuals, order = c(2,1,0), method = "CSS")
+fit43 <- arima(residuals, order = c(2,1,0), method = "ML")
+
+print(fit41)
+print(fit42)
+print(fit43)
+
+AIC(fit41) # 783.7276
+AIC(fit42)
+AIC(fit43) # 783.7276
+
+fit <- auto.arima(residuals, allowdrift = FALSE)
+print(fit)
+AIC(fit) # 780.1837
