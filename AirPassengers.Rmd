@@ -1,0 +1,72 @@
+---
+title: "Airline Passenger Data: A Case Study"
+output:
+  html_document: default
+---
+  
+```{r include = FALSE}
+library(tseries)
+library(zoo)
+library(forecast)
+```
+
+The data that we are using for this case study comes from the classic Box & Jenkins airline data. Monthly totals of international airline passengers (in thousands), from 1949 to 1960. 
+
+It is also present in R, and can be accessed from R's datasets as follows.
+
+```{r include = FALSE}
+data("AirPassengers")
+dat <- AirPassengers # store the AirPassengers dataframe in a variable, dat
+```
+
+## Is there any seasonality present in the data? Provide supportive analysis.
+
+```{r}
+boxplot(dat ~ cycle(dat)) # indicates presence of seasonality
+```
+Yes, seasonality indeed can be said to be present. As can be seen above, the monthly distributions are somewhat different in July and Agust, compared with other months.
+
+One can also conveniently decompose a time sereis in R and plot the seasonal component using the following code:
+
+```{r}
+plot(decompose(dat)$seasonal, 
+     main = 'Seasonal Variation of Air Passengers over Time', 
+     ylab = 'Seasonal Variation',
+     col = 'black',
+     lwd = 3)
+```
+
+## What is the order of integration required to make the series stationary?
+
+There is a readymade function in R to do this, called ndiffs. It estimates the number of differences required to make a given time series stationary. And to check for stationarity, its default 'test' parameter requires that the series simultaneously satisfies KPSS, ADF and PP tests for stationarity.
+
+```{r}
+ndiffs(dat)
+```
+
+We can manually verify this.
+
+```{r}
+adf.test(dat) # rejects the NULL : Alternative hypothesis is of Stationarity
+pp.test(dat) # rejects the NULL: Alternative hypothesis is of Stationarity
+kpss.test(dat) # rejects the NULL : Alternative hypothesis is of Unit Root
+
+```
+
+ADF and PP tests indicate stationarity, however the KPSS test indicates the presence of a unit root. We can therefore rule out stationarity of the series, and go ahead with differencing it before trying out these tests again.
+
+Store the differenced series in a variable, and call it diff_dat:
+
+```{r include = FALSE}
+diff_dat <- diff(dat) # take the differenced series
+```
+
+
+```{r}
+adf.test(diff_dat)
+pp.test(diff_dat)
+kpss.test(diff_dat)
+```
+
+...and we see that the ADF and PP tests reject the NULL of unit root, and this time the KPSS test fails to reject the null of stationarity in the series. Hence we can conclude that the series does not have unit root anymore, making our original series an I(1) series.
+
