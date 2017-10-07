@@ -1,72 +1,166 @@
 ---
-title: "Airline Passenger Data: A Case Study"
+title: "ARIMA Modeling in R"
 output:
   html_document: default
 ---
-  
-```{r include = FALSE}
-library(tseries)
-library(zoo)
-library(forecast)
+
+Let's start off by loading relevant R libraries!
+```{r}
+library(tseries);library(zoo);library(forecast);library(normwhn.test)
 ```
 
-The data that we are using for this case study comes from the classic Box & Jenkins airline data. Monthly totals of international airline passengers (in thousands), from 1949 to 1960. 
+The data used for this case study comes from the classic Box & Jenkins airline data that documents monthly totals of international airline passengers from 1949 to 1960. It's a great example dataset to showcase the basics of time series analysis.
 
-It is also present in R, and can be accessed from R's datasets as follows.
-
-```{r include = FALSE}
-data("AirPassengers")
-dat <- AirPassengers # store the AirPassengers dataframe in a variable, dat
-```
-
-## Is there any seasonality present in the data? Provide supportive analysis.
+It can be accessed directly in R like this:
 
 ```{r}
-boxplot(dat ~ cycle(dat)) # indicates presence of seasonality
+data('AirPassengers')
+dat <- AirPassengers
 ```
-Yes, seasonality indeed can be said to be present. As can be seen above, the monthly distributions are somewhat different in July and Agust, compared with other months.
 
-One can also conveniently decompose a time sereis in R and plot the seasonal component using the following code:
+Next, we attempt to visualize the data and decompose it into its constituents - a trend, a seasonal component and a supposedly random component, which can be either be modeled as an ARIMA(p,d,q) model or be white noise.
+
+## Decomposing this Series
+```{r}
+plot(decompose(dat))
+```
+
+Note that the decomposition for this particular case assumes the 'period' to measure seasonality to be 12 months, mainly because this data set in R is stored as a ts object of frequency 12. One could go ahead with a custom seasonal period for series where the seasonality isn't that clear - and that can be subject matter for another blog post.
+
+Let's have a look at the data below.
 
 ```{r}
-plot(decompose(dat)$seasonal, 
-     main = 'Seasonal Variation of Air Passengers over Time', 
-     ylab = 'Seasonal Variation',
-     col = 'black',
-     lwd = 3)
+print(dat)
 ```
 
-## What is the order of integration required to make the series stationary?
+## Seasonality in the data
 
-There is a readymade function in R to do this, called ndiffs. It estimates the number of differences required to make a given time series stationary. And to check for stationarity, its default 'test' parameter requires that the series simultaneously satisfies KPSS, ADF and PP tests for stationarity.
+There are other ways of checking for seasonality in data. For example:
+
+```{r}
+boxplot(dat ~ cycle(dat))
+```
+
+This plot suggests that there is some seasonal effect. The distribution of airline passengers for the months of June through September are markedly more than that of other months.
+
+If you're curious what the cycle function is used here, try it out!
+
+```{r}
+print(cycle(dat))
+```
+
+Its job is simple. For each data point in the time series, cycle tells you the position of that particular data point in that cycle. The first candle stick in the plot above is therefore the distribution of airpassengers that corresponded to the 1st point (January) in the 12-point cycle - and so on.
+
+Here's a plot of the seasonal component of the airlines passenger data:
+
+```{r}
+plot(decompose(dat)$seasonal,
+     main = 'Seasonal Variation in Airline Passengers over Time',
+     ylab = 'Seasonal Variation', col = 'black', lwd = 3)
+```
+
+## Order of Integration and Stationarity
+
+There is an inbuilt function in R to check for the number of differences it would take to make a time series stationary. The default methods that this function uses to test for stationarity at each step of the differencing are - the Augmented Dickey-Fuller test, the Phillips-Perron unit root test and the KPSS test for stationarity.
 
 ```{r}
 ndiffs(dat)
 ```
 
-We can manually verify this.
+It indicates that first-differencing is the way to go. And we can verify this.
 
 ```{r}
-adf.test(dat) # rejects the NULL : Alternative hypothesis is of Stationarity
-pp.test(dat) # rejects the NULL: Alternative hypothesis is of Stationarity
-kpss.test(dat) # rejects the NULL : Alternative hypothesis is of Unit Root
-
+adf.test(dat); pp.test(dat); kpss.test(dat)
 ```
 
-ADF and PP tests indicate stationarity, however the KPSS test indicates the presence of a unit root. We can therefore rule out stationarity of the series, and go ahead with differencing it before trying out these tests again.
+Note that the alternative hypothesis for the ADF and PP tests is of stationarity, and for the KPSS test, the alternative hypothesis is of the presence of a unit root.
 
-Store the differenced series in a variable, and call it diff_dat:
+So the above results indicate the presence of a unit root (with the KPSS test), while the ADF and PP tests indicate stationarity. We therefore can't conclusively say that the series is stationary. Let's try out these same tests after differencing.
+
+Store the differenced series in a variable and call it say, diff_dat.
 
 ```{r include = FALSE}
-diff_dat <- diff(dat) # take the differenced series
+diff_dat <- diff(dat)
 ```
-
 
 ```{r}
-adf.test(diff_dat)
-pp.test(diff_dat)
-kpss.test(diff_dat)
+adf.test(diff_dat); pp.test(diff_dat); kpss.test(diff_dat)
 ```
 
-...and we see that the ADF and PP tests reject the NULL of unit root, and this time the KPSS test fails to reject the null of stationarity in the series. Hence we can conclude that the series does not have unit root anymore, making our original series an I(1) series.
+...and we see that the ADF and PP tests reject the NULL of unit root while the KPSS test fails to reject the NULL of stationarity in the series. Hence we can conclude that the series doesn't have a unit root anymore, making our original series I(1). If we are to fit an ARIMA(p,d,q) model hereon, we know that d = 1.
+
+## The ARIMA Model: What are p and q?
+
+To be sure that an ARIMA model can be fit on this data set, one has to look at the ACF and PACF charts.
+
+```{r}
+tsdisplay(diff_dat)
+```
+
+There are a couple of points to take from the above chart.
+
+1. Seasonality can also be spotted in the differenced series - evident from the ACF. The pattern repeats every 12 or so lags, which means seasonality of 12 months is the way to go when deseasonalizing the differenced data before fitting an ARMA(p,q) model. Note that I say ARMA because we're dealing with an already differenced series.
+
+2. The (differenced) series variance seems to increase with time, after around 1956. To take care of increasing error variance towards the later part of the series, we can log-transform the data - and then look at the ACF and PACF.
+
+```{r}
+tsdisplay(diff(log(dat)))
+```
+
+Much better!
+
+The residual series seems to have similar variance over time. However seasonality is still apparent from the ACF. We therefore need to de-seasonalzie the data before zeroing down on a possible AR order (p) from the PACF and MA order (q) from the ACF. Let's try that!
+
+```{r}
+tsdisplay(decompose(log(dat))$random)
+```
+
+The ACF is a slowly but surely attenuating series, perhaps with the vestiges of seasonality still present and the PACF indicates a lower order AR process. One can't simply look at the ACF and PACF and based on just looking at them pin point the order of AR and MA processes. One has to test various combinations of p and q once the ACF and PACF have made the broader picture clear - as to the range of models that might be tested for goodness of fit.
+
+One might therefore want to test combinations of models with say, p <= 5 and q <= 10 for a good model. The way in which AIC / BIC / SBC criteria are defined account for the principle of parsimony, so it's most likely that a lower order MA ends up minimizing AIC / AICc or BIC.
+
+```{r}
+arimaModel <- auto.arima(dat, d = 1, max.p = 5, max.q = 10)
+summary(arimaModel)
+```
+
+Therefore p = 2, q = 1, d = 1 and the model also has 1 seasonal difference of frequency 12.
+
+## White Noise
+
+The next thing to check for in the residuals - and indicator of the goodness of fit, is that the residuals are white noise. That is, if the fit model is correct, no more information can be gleaned about the underlying process.
+
+```{r}
+tsdisplay(arimaModel$residuals)
+```
+
+White Noise can be tested for by plotting the ACF and PACF of the residuals. Since the autocorrelations immediately die down to zero (or to put it more technically, not significantly different from zero), we can safely assume the residuals to be white noise.
+
+## Predicting the Future
+
+Now let's have fun and predict airline passenger-flow for the next 12 months! If you wish to take a look at the code that generated these plots, go check the RMarkdown file rendering this presentation.
+
+```{r}
+preds <- predict(arimaModel, n.ahead = 12)
+print(preds)
+```
+
+
+```{r echo = FALSE}
+# First Plot
+plot(dat, col = 'green', main = 'Acutal vs ARIMA Model',
+     ylab = 'Air Passengers', lwd = 3)
+lines(arimaModel$fitted, col = 'black', lwd = 3, lty = 2)
+legend('topleft', legend = c('Actual', 'ARIMA Fit'),
+       col = c('green','black'), lwd = c(3,3), lty = c(1,2))
+```
+
+Here's a look at the predicted series:
+
+```{r echo = FALSE}
+ts.plot(dat, preds$pred, main = 'Actual vs ARIMA Predictions',
+        col = c('green','black'), lty = c(1,2), lwd = c(3,3))
+legend('topleft', legend = c('Actual Data', 'ARIMA Predictions'),
+       col = c('green','black'), lwd = c(3,3), lty = c(1,2))
+```
 
